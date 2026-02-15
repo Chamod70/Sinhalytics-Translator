@@ -5,22 +5,22 @@ export const translateWithAnalysis = async (text: string, direction: Translation
   const apiKey = (import.meta as any).env?.VITE_API_KEY;
 
   if (!apiKey) {
-    throw new Error("API Key is missing. Please check your Vercel Environment Variables.");
+    throw new Error("API Key is missing. Check Vercel Environment Variables.");
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  // v1 endpoint එක භාවිතා කිරීම වඩාත් ස්ථාවරයි
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }, { apiVersion: 'v1' });
+  
+  // මෙතනින් { apiVersion: 'v1' } හෝ 'v1beta' අයින් කරලා බලමු. 
+  // SDK එක ඉබේම ගැලපෙන එක තෝරා ගනීවි.
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   const sourceLang = direction === 'si-en' ? 'Sinhala' : 'English';
   const targetLang = direction === 'si-en' ? 'English' : 'Sinhala';
 
-  // Prompt එක ඇතුළතම JSON Schema එක ලබා දෙමු
   const prompt = `
-    You are an expert linguistic translator.
-    Translate the following ${sourceLang} text to ${targetLang}: "${text}"
+    You are a professional translator. Translate the following ${sourceLang} text to ${targetLang}: "${text}"
     
-    Return the response strictly in JSON format with these keys:
+    Provide the result ONLY as a JSON object:
     {
       "translatedText": "string",
       "confidence": number,
@@ -28,8 +28,6 @@ export const translateWithAnalysis = async (text: string, direction: Translation
       "clarification": "string",
       "detailedAnalysis": [{"word": "string", "meaning": "string", "contextCheck": "string"}]
     }
-    
-    Important: Return ONLY the JSON object. No markdown, no backticks.
   `;
 
   try {
@@ -37,10 +35,11 @@ export const translateWithAnalysis = async (text: string, direction: Translation
     const response = await result.response;
     let jsonText = response.text();
     
-    // වැරදීමකින් හරි ```json ... ``` ලෙස ආවොත් ඒවා සුද්ද කරමු
-    jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+    // JSON එක විතරක් තෝරා ගැනීමට Regex එකක් පාවිච්චි කරමු (Safety first)
+    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("Invalid JSON response");
     
-    const parsed = JSON.parse(jsonText);
+    const parsed = JSON.parse(jsonMatch[0]);
     
     return {
       translatedText: parsed.translatedText || "",

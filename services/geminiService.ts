@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Modality } from "@google/genai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { TranslationResult, TranslationDirection } from "../types";
 
 // Helper to decode Base64 audio

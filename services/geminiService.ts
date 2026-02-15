@@ -1,21 +1,26 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { TranslationResult, TranslationDirection } from "../types";
+
 export const translateWithAnalysis = async (text: string, direction: TranslationDirection): Promise<TranslationResult> => {
   const apiKey = (import.meta as any).env?.VITE_API_KEY;
 
   if (!apiKey) {
-    throw new Error("API Key is missing.");
+    throw new Error("API Key is missing. Please check your Vercel Environment Variables.");
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  // v1 endpoint එක භාවිතා කිරීම වඩාත් ස්ථාවරයි
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }, { apiVersion: 'v1' });
 
   const sourceLang = direction === 'si-en' ? 'Sinhala' : 'English';
   const targetLang = direction === 'si-en' ? 'English' : 'Sinhala';
 
-  // Prompt එක ඇතුළතම JSON format එක ඉල්ලමු
+  // Prompt එක ඇතුළතම JSON Schema එක ලබා දෙමු
   const prompt = `
+    You are an expert linguistic translator.
     Translate the following ${sourceLang} text to ${targetLang}: "${text}"
     
-    Provide the response strictly in JSON format with the following keys:
+    Return the response strictly in JSON format with these keys:
     {
       "translatedText": "string",
       "confidence": number,
@@ -23,6 +28,8 @@ export const translateWithAnalysis = async (text: string, direction: Translation
       "clarification": "string",
       "detailedAnalysis": [{"word": "string", "meaning": "string", "contextCheck": "string"}]
     }
+    
+    Important: Return ONLY the JSON object. No markdown, no backticks.
   `;
 
   try {
@@ -30,7 +37,7 @@ export const translateWithAnalysis = async (text: string, direction: Translation
     const response = await result.response;
     let jsonText = response.text();
     
-    // වැරදීමකින් හරි ```json ... ``` කියලා ආවොත් ඒක අයින් කරන්න
+    // වැරදීමකින් හරි ```json ... ``` ලෙස ආවොත් ඒවා සුද්ද කරමු
     jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
     
     const parsed = JSON.parse(jsonText);
@@ -45,5 +52,15 @@ export const translateWithAnalysis = async (text: string, direction: Translation
   } catch (error) {
     console.error("Translation error:", error);
     throw error;
+  }
+};
+
+export const playTextToSpeech = async (text: string): Promise<void> => {
+  try {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'si-LK'; 
+    window.speechSynthesis.speak(utterance);
+  } catch (error) {
+    console.error("TTS Error:", error);
   }
 };

@@ -1,0 +1,5 @@
+{
+  "name": "Sinhalytics Translator",
+  "description": "A smart Sinhala to English converter that analyzes context, checks surrounding words for semantic clarity, and provides intelligent guesses for ambiguous phrases.",
+  "requestFramePermissions": []
+}

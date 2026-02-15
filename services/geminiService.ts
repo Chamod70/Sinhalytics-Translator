@@ -16,20 +16,25 @@ const decodeAudioData = async (
 };
 
 export const translateWithAnalysis = async (text: string, direction: TranslationDirection): Promise<TranslationResult> => {
-  // Vite වලදී පාවිච්චි කරන්නේ මෙහෙමයි
+  // Vite environment variables ලබා ගන්නා නිවැරදි ක්‍රමය
   const apiKey = (import.meta as any).env?.VITE_API_KEY;
 
   if (!apiKey) {
-    throw new Error("API Key is missing. Please check your environment variables.");
+    throw new Error("API Key is missing. Please check your environment variables in Vercel.");
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  
+  // v1beta වෙනුවට v1 භාවිතා කිරීමෙන් 404 error එක මගහැරිය හැක
+  const model = genAI.getGenerativeModel(
+    { model: 'gemini-1.5-flash' },
+    { apiVersion: 'v1' }
+  );
 
   const sourceLang = direction === 'si-en' ? 'Sinhala' : 'English';
   const targetLang = direction === 'si-en' ? 'English' : 'Sinhala';
 
-  const prompt = `Translate this ${sourceLang} text to ${targetLang}: "${text}"`;
+  const prompt = `Translate this ${sourceLang} text to ${targetLang}: "${text}". Return as JSON.`;
 
   try {
     const result = await model.generateContent({
@@ -59,7 +64,7 @@ export const translateWithAnalysis = async (text: string, direction: Translation
       }
     });
 
-    const response = result.response;
+    const response = await result.response;
     const jsonText = response.text();
     const parsed = JSON.parse(jsonText);
     
@@ -77,11 +82,10 @@ export const translateWithAnalysis = async (text: string, direction: Translation
 };
 
 export const playTextToSpeech = async (text: string): Promise<void> => {
-  const apiKey = (import.meta as any).env?.VITE_API_KEY;
-  if (!apiKey) return;
-  
   try {
     const utterance = new SpeechSynthesisUtterance(text);
+    // සිංහල භාෂාව සඳහා සහය ඇත්නම් එය තෝරා ගැනීමට (විකල්ප)
+    utterance.lang = 'si-LK'; 
     window.speechSynthesis.speak(utterance);
   } catch (error) {
     console.error("TTS Error:", error);

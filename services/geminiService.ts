@@ -16,11 +16,18 @@ const decodeAudioData = async (
 };
 
 export const translateWithAnalysis = async (text: string, direction: TranslationDirection): Promise<TranslationResult> => {
-  if (!process.env.API_KEY) {
+  // සටහන: Vercel හි Environment Variable එක "VITE_API_KEY" ලෙස තිබිය යුතුයි (Frontend එකකදී නම්)
+  const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY;
+
+  if (!apiKey) {
     throw new Error("API Key is missing. Please check your environment variables.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // නිවැරදි Class නම: GoogleGenerativeAI
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ 
+    model: 'gemini-1.5-flash', // දැනට පවතින ස්ථාවර මොඩලය
+  });
 
   const sourceLang = direction === 'si-en' ? 'Sinhala' : 'English';
   const targetLang = direction === 'si-en' ? 'English' : 'Sinhala';
@@ -30,49 +37,35 @@ export const translateWithAnalysis = async (text: string, direction: Translation
     
     Your task is to:
     1. Translate the provided ${sourceLang} text to natural-sounding ${targetLang}.
-    2. Analyze the context carefully. specifically checking "before and after" words for each key segment to determine the correct meaning (e.g., distinguishing between homonyms or context-dependent verbs).
-    3. Provide "guesses" or alternative interpretations if the input is ambiguous or fragmentary.
-    4. Clarify grammatical nuances or cultural context.
+    2. Analyze the context carefully.
+    3. Provide "guesses" or alternative interpretations.
+    4. Clarify grammatical nuances.
 
     Input Text: "${text}"
 
-    Return the response strictly in JSON format matching this schema:
-    {
-      "translatedText": "The main translation",
-      "confidence": 95,
-      "guesses": ["Alternative 1", "Alternative 2"],
-      "clarification": "A summary explaining the sentence structure and tone.",
-      "detailedAnalysis": [
-        {
-          "word": "Source Word/Phrase",
-          "meaning": "Target Definition",
-          "contextCheck": "Explanation of how words appearing before or after this word influenced the translation."
-        }
-      ]
-    }
+    Return the response strictly in JSON format matching the schema.
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: {
-          type: Type.OBJECT,
+          type: SchemaType.OBJECT, // Type වෙනුවට SchemaType භාවිතා කරන්න
           properties: {
-            translatedText: { type: Type.STRING },
-            confidence: { type: Type.NUMBER },
-            guesses: { type: Type.ARRAY, items: { type: Type.STRING } },
-            clarification: { type: Type.STRING },
+            translatedText: { type: SchemaType.STRING },
+            confidence: { type: SchemaType.NUMBER },
+            guesses: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+            clarification: { type: SchemaType.STRING },
             detailedAnalysis: {
-              type: Type.ARRAY,
+              type: SchemaType.ARRAY,
               items: {
-                type: Type.OBJECT,
+                type: SchemaType.OBJECT,
                 properties: {
-                  word: { type: Type.STRING },
-                  meaning: { type: Type.STRING },
-                  contextCheck: { type: Type.STRING }
+                  word: { type: SchemaType.STRING },
+                  meaning: { type: SchemaType.STRING },
+                  contextCheck: { type: SchemaType.STRING }
                 }
               }
             }
@@ -81,21 +74,19 @@ export const translateWithAnalysis = async (text: string, direction: Translation
       }
     });
 
-    const jsonText = response.text;
+    const response = result.response;
+    const jsonText = response.text();
     if (!jsonText) throw new Error("Empty response from AI");
     
     const parsed = JSON.parse(jsonText);
     
-    // Ensure arrays exist to prevent UI crashes if AI omits fields
-    const result: TranslationResult = {
+    return {
       translatedText: parsed.translatedText || "",
       confidence: parsed.confidence || 0,
       guesses: Array.isArray(parsed.guesses) ? parsed.guesses : [],
       clarification: parsed.clarification || "",
       detailedAnalysis: Array.isArray(parsed.detailedAnalysis) ? parsed.detailedAnalysis : []
     };
-
-    return result;
 
   } catch (error) {
     console.error("Translation error:", error);
@@ -104,36 +95,24 @@ export const translateWithAnalysis = async (text: string, direction: Translation
 };
 
 export const playTextToSpeech = async (text: string): Promise<void> => {
-  if (!process.env.API_KEY) return;
+  const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY;
+  if (!apiKey) return;
   
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const genAI = new GoogleGenerativeAI(apiKey);
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text: text }] }],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Kore' },
-          },
-        },
-      },
+    // සටහන: දැනට TTS සඳහා සහය දක්වන්නේ නිශ්චිත මොඩල පමණි. 
+    // මෙය ක්‍රියා නොකරන්නේ නම් සාමාන්‍ය generateContent භාවිතා කරන්න.
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const response = await model.generateContent({
+      contents: [{ parts: [{ text: `Read this text clearly: ${text}` }] }],
     });
 
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    
-    if (base64Audio) {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      const audioContext = new AudioContextClass();
-      const audioBuffer = await decodeAudioData(base64Audio, audioContext);
-      
-      const source = audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioContext.destination);
-      source.start();
-    }
+    // TTS සඳහා දැනට ඇති පහසුකම් අනුව Browser එකේ SpeechSynthesis පාවිච්චි කිරීම වඩාත් සුදුසුයි
+    const utterance = new SpeechSynthesisUtterance(text);
+    window.speechSynthesis.speak(utterance);
+
   } catch (error) {
     console.error("TTS Error:", error);
   }

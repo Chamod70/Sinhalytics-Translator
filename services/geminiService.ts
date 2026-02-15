@@ -2,25 +2,25 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { TranslationResult, TranslationDirection } from "../types";
 
 export const translateWithAnalysis = async (text: string, direction: TranslationDirection): Promise<TranslationResult> => {
-  // Vite වලදී Env variables ගන්නා නිවැරදි ක්‍රමය
   const apiKey = (import.meta as any).env?.VITE_API_KEY;
 
   if (!apiKey) {
-    throw new Error("API Key is missing. Please check Vercel Environment Variables.");
+    throw new Error("API Key missing. Check Vercel Settings.");
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
   
-  // 'gemini-1.5-flash' වෙනුවට 'gemini-1.5-flash-latest' භාවිතා කිරීම වඩාත් ස්ථාවරයි
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+  // මෙතන 'gemini-1.5-flash' වෙනුවට 'gemini-pro' පාවිච්චි කරනවා. 
+  // මේක v1 endpoint එකේ අනිවාර්යයෙන්ම වැඩ කරනවා.
+  const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
   const sourceLang = direction === 'si-en' ? 'Sinhala' : 'English';
   const targetLang = direction === 'si-en' ? 'English' : 'Sinhala';
 
   const prompt = `
-    You are a linguistic expert. Translate the following ${sourceLang} text to ${targetLang}: "${text}"
+    Translate the following ${sourceLang} text to ${targetLang}: "${text}"
     
-    Provide the response ONLY as a valid JSON object with these keys:
+    Return the response ONLY as a JSON object with these exact keys:
     {
       "translatedText": "string",
       "confidence": number,
@@ -35,9 +35,9 @@ export const translateWithAnalysis = async (text: string, direction: Translation
     const response = await result.response;
     let jsonText = response.text();
     
-    // JSON එක පමණක් ලබා ගැනීමට Regex භාවිතා කරමු (Safety net)
+    // JSON එක විතරක් කඩා ගන්නා ආරක්ෂිත ක්‍රමය
     const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Could not find JSON in response");
+    if (!jsonMatch) throw new Error("Invalid response format");
     
     const parsed = JSON.parse(jsonMatch[0]);
     
@@ -49,7 +49,7 @@ export const translateWithAnalysis = async (text: string, direction: Translation
       detailedAnalysis: Array.isArray(parsed.detailedAnalysis) ? parsed.detailedAnalysis : []
     };
   } catch (error) {
-    console.error("Translation error details:", error);
+    console.error("Gemini Error:", error);
     throw error;
   }
 };

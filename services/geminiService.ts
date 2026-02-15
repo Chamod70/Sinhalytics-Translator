@@ -8,7 +8,7 @@ export const translateWithAnalysis = async (text: string, direction: Translation
     throw new Error("API Key missing. Check Vercel Settings.");
   }
 
-  // මෙතනදී අපි v1beta භාවිතා කරමු, එවිට Flash මොඩලය 404 වෙන්නේ නැහැ
+  // මෙතනදී අපි v1beta භාවිතා කරනවා. Flash මොඩලය හොඳින්ම වැඩ කරන්නේ මෙතනයි.
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel(
     { model: "gemini-1.5-flash-latest" }, 
@@ -19,9 +19,10 @@ export const translateWithAnalysis = async (text: string, direction: Translation
   const targetLang = direction === 'si-en' ? 'English' : 'Sinhala';
 
   const prompt = `
+    You are a high-end linguistic translator.
     Translate the following ${sourceLang} text to ${targetLang}: "${text}"
     
-    Return the response ONLY as a JSON object with these keys:
+    Provide the response ONLY as a JSON object with these keys:
     {
       "translatedText": "string",
       "confidence": number,
@@ -36,9 +37,9 @@ export const translateWithAnalysis = async (text: string, direction: Translation
     const response = await result.response;
     let jsonText = response.text();
     
-    // JSON එක පමණක් ලබා ගැනීමට Regex භාවිතා කරමු
+    // AI එක අමතර වචන එව්වත් JSON එක විතරක් කඩා ගන්න Regex එකක් භාවිතා කරමු
     const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Invalid response format");
+    if (!jsonMatch) throw new Error("Invalid response format from AI");
     
     const parsed = JSON.parse(jsonMatch[0]);
     

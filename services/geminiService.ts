@@ -1,71 +1,38 @@
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
-import { TranslationResult, TranslationDirection } from "../types";
-
-// Helper to decode Base64 audio
-const decodeAudioData = async (
-  base64String: string,
-  audioContext: AudioContext
-): Promise<AudioBuffer> => {
-  const binaryString = atob(base64String);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return await audioContext.decodeAudioData(bytes.buffer);
-};
-
 export const translateWithAnalysis = async (text: string, direction: TranslationDirection): Promise<TranslationResult> => {
-  // Vite environment variables ලබා ගන්නා නිවැරදි ක්‍රමය
   const apiKey = (import.meta as any).env?.VITE_API_KEY;
 
   if (!apiKey) {
-    throw new Error("API Key is missing. Please check your environment variables in Vercel.");
+    throw new Error("API Key is missing.");
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  
-  // v1beta වෙනුවට v1 භාවිතා කිරීමෙන් 404 error එක මගහැරිය හැක
-  const model = genAI.getGenerativeModel(
-    { model: 'gemini-1.5-flash' },
-    { apiVersion: 'v1' }
-  );
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
   const sourceLang = direction === 'si-en' ? 'Sinhala' : 'English';
   const targetLang = direction === 'si-en' ? 'English' : 'Sinhala';
 
-  const prompt = `Translate this ${sourceLang} text to ${targetLang}: "${text}". Return as JSON.`;
+  // Prompt එක ඇතුළතම JSON format එක ඉල්ලමු
+  const prompt = `
+    Translate the following ${sourceLang} text to ${targetLang}: "${text}"
+    
+    Provide the response strictly in JSON format with the following keys:
+    {
+      "translatedText": "string",
+      "confidence": number,
+      "guesses": ["string"],
+      "clarification": "string",
+      "detailedAnalysis": [{"word": "string", "meaning": "string", "contextCheck": "string"}]
+    }
+  `;
 
   try {
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: SchemaType.OBJECT,
-          properties: {
-            translatedText: { type: SchemaType.STRING },
-            confidence: { type: SchemaType.NUMBER },
-            guesses: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-            clarification: { type: SchemaType.STRING },
-            detailedAnalysis: {
-              type: SchemaType.ARRAY,
-              items: {
-                type: SchemaType.OBJECT,
-                properties: {
-                  word: { type: SchemaType.STRING },
-                  meaning: { type: SchemaType.STRING },
-                  contextCheck: { type: SchemaType.STRING }
-                }
-              }
-            }
-          }
-        }
-      }
-    });
-
+    const result = await model.generateContent(prompt);
     const response = await result.response;
-    const jsonText = response.text();
+    let jsonText = response.text();
+    
+    // වැරදීමකින් හරි ```json ... ``` කියලා ආවොත් ඒක අයින් කරන්න
+    jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+    
     const parsed = JSON.parse(jsonText);
     
     return {
@@ -78,16 +45,5 @@ export const translateWithAnalysis = async (text: string, direction: Translation
   } catch (error) {
     console.error("Translation error:", error);
     throw error;
-  }
-};
-
-export const playTextToSpeech = async (text: string): Promise<void> => {
-  try {
-    const utterance = new SpeechSynthesisUtterance(text);
-    // සිංහල භාෂාව සඳහා සහය ඇත්නම් එය තෝරා ගැනීමට (විකල්ප)
-    utterance.lang = 'si-LK'; 
-    window.speechSynthesis.speak(utterance);
-  } catch (error) {
-    console.error("TTS Error:", error);
   }
 };
